@@ -24,12 +24,17 @@ Ranbowsix code base for project14, HTML exract, mapping and score.
   - **No Local Storage**: Shifted away from `fs.writeFile`. The server now processes the data entirely in-memory and returns the JSON directly over the network, ensuring a seamless, wait-free experience for the frontend.
   - **Data Packaging**: Bundled the raw `insights` array directly into their corresponding `scores.sections` cards. The frontend team can now render the UI directly without writing complex array-matching logic.
  
-## Fifth Update (Latest)
+## Fifth Update 
 - **src/analyzer.js**: Reconstruct the original 5 dimensions into 7, and add multiple independent functions to each dimension.
 - **src/mapping.js**: Added support for the `boolean` type (`titleExists`, `hasSkipLink`, `langAttributeExists`, etc.), as well as the `info` type for purely statistical fields (`videoCount`, `formFieldCount`, etc., which do not participate in scoring).
 - **src/scorer.js**: In `scoreMetric`, two types `boolean` and `info` has been added, and the `overallScore` has been modified to be scored by weight.
 
-
+## Sixth Update 
+- **src/scorer.js**:
+  - Add `SKIP_RULES` to skip the indicator that "not applicable" to the current page.
+  - Introduce Penalty Multiplier in `calculateScores` function to give more penalty to Low-quality sites.
+  - Introduce Contrast-Based Score Expansion (Linear Stretching) after penalty adjustment, enhancing score spread while preserving monotonic ordering.
+  - Four-Level Status Threshold.
 ---
 ## Installation & Usage
 ### 1.Install dependencies:
@@ -110,9 +115,10 @@ $$Score_{overall} = \frac{\sum (Score_{section} \times weight_{section})}{\sum w
 
 | Status | Score range |
 | :--- | :--- |
-| ✅ Good | ≥ 80 |
-| ⚠️ Warning | 60 – 79 |
-| ❌ Poor | < 60 |
+|  Good | ≥ 85 |
+|  Caution | 70 – 84 |
+|  Warning | 55 – 69 |
+|  Poor | < 54 |
 
 ### 4. Regulatory & Standards Mapping (WCAG 2.2 & ISO 9241-11)
 
