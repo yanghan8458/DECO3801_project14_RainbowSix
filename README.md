@@ -244,11 +244,74 @@ skipLinkWorks: (m) => m.hasSkipLink === false,
 
 This prevents pages from being unfairly penalised for failing a check that was never relevant to them, keeping section scores grounded in what is actually present on the page.
 
-### 4. Regulatory & Standards Mapping (WCAG 2.2 & ISO 9241-11)
+### 4. AI Agent Architecture
+
+#### 4.1 Overview
+
+The AI agent layer (`src/ai-agent/`) is a lightweight, skill-based routing system that connects analysis output to a locally running Ollama model. It is fully decoupled from the scoring engine — the agent receives finished results and produces natural-language or structured-code output without modifying any scores.
+
+#### 4.2 Skill Contract
+
+Each skill module exports the following shape, making skills hot-swappable in the registry:
+
+| Export | Type | Description |
+| :--- | :--- | :--- |
+| `name` | string | Unique skill identifier |
+| `description` | string | Human-readable summary |
+| `inputType` | string | Key used by the agent router |
+| `run(payload)` | async function | Main skill entry point |
+| `checkOllamaHealth()` | async function | Connectivity diagnostic |
+| `testOllamaChat()` | async function | Minimal model round-trip test |
+
+#### 4.3 Skill: Cognitive Accessibility Advice (`cognitive_accessibility_analysis`)
+
+Accepts the scorer's section-level output (scores, statuses, and insights) and prompts the model to return a structured JSON report:
+
+```json
+{
+  "summary": "2–3 sentence plain-language overview",
+  "topProblems": ["problem 1", "problem 2", "problem 3"],
+  "recommendations": [
+    {
+      "title": "string",
+      "action": "string",
+      "reason": "string",
+      "priority": "high | medium | low"
+    }
+  ]
+}
+```
+
+#### 4.4 Skill: Code Fix Suggestions (`code_fix_request`)
+
+Accepts a list of issues from `codeExtractor.js`, sorts them by severity, caps the payload at 10 issues, and prompts the model to return corrected code:
+
+```json
+{
+  "fixes": [
+    {
+      "ruleId": "string",
+      "severity": "string",
+      "originalSnippet": "string",
+      "fixedSnippet": "string",
+      "explanation": "string",
+      "breakingChange": false
+    }
+  ]
+}
+```
+
+Both skills use a `safeJsonParse` fallback that attempts to extract a JSON object from free-text model output if the model does not return clean JSON.
+
+### 5. Regulatory & Standards Mapping (WCAG 2.2 & ISO 9241-11)
 
 The RainbowSix analyzer is fully aligned with **WCAG 2.2** (published Oct 2023), with a specific focus on **Cognitive Accessibility** and **User Interaction Efficiency**.
 
-#### 4.1 WCAG 2.2 Success Criteria Mapping
+### 5. Regulatory & Standards Mapping (WCAG 2.2 & ISO 9241-11)
+
+The RainbowSix analyzer is fully aligned with **WCAG 2.2** (published Oct 2023), with a specific focus on **Cognitive Accessibility** and **User Interaction Efficiency**.
+
+#### 5.1 WCAG 2.2 Success Criteria Mapping
 Each metric is evaluated against the latest success criteria to ensure compliance for users with cognitive, motor, or sensory impairments.
 
 | Principle | Metric | WCAG 2.2 Criteria | Cognitive Impact & Meaning |
@@ -258,7 +321,7 @@ Each metric is evaluated against the latest success criteria to ensure complianc
 | **Understandable** | `sentenceAverageLength`, `complexWordRatio`, `labelCoverage` | 3.1.5 Reading Level / 3.3.8 Accessible Authentication | **Lowering Cognitive Load**: Long sentences and jargon cause mental fatigue. SC 3.3.8 (New in 2.2) requires that users are not forced into "cognitive function tests" (like complex puzzles) to authenticate or submit forms. Help reduces mental fatigue; ensures users don't need "cognitive function tests" to use the site. |
 | **Robust** | `maxDepth` | 2.4.8 Location / 2.4.5 Multiple Ways | **Preventing Navigational Lostness**: Ensures site structures are predictable. If nesting is too deep, users on screen readers or mobile devices may become completely disoriented within the site architecture.|
 
-#### 4.2 ISO 9241-11 Usability Pillars
+#### 5.2 ISO 9241-11 Usability Pillars
 We translate technical artifacts into the three pillars of the ISO 9241-11 quality model:
 
 * **Effectiveness (Success Rate)**: Can the user achieve their goal?
@@ -271,5 +334,5 @@ We translate technical artifacts into the three pillars of the ISO 9241-11 quali
     * *Mapped Metrics*: `autoplayMediaCount`. 
     * *Focus*: Giving users control over their environment to prevent anxiety and sensory overload.
 
-### 5. Technical Note on WCAG 2.2 Implementation
+### 6. Technical Note on WCAG 2.2 Implementation
 The analyzer specifically addresses the **Cognitive Load** aspect of WCAG 2.2. By evaluating `complexWordRatio` and `sentenceAverageLength`, the tool directly supports **SC 3.3.8 (Accessible Authentication)** by ensuring that the language used in help text and labels does not create an unnecessary "cognitive function test" for the user.
