@@ -35,15 +35,79 @@ Ranbowsix code base for project14, HTML exract, mapping and score.
   - **Penalty Multiplier Enhancement**: Improved score compression for low-quality sites. Sections scoring below the penalty threshold now apply a weighted miss-based multiplier to the overall score, with a configurable floor to prevent over-penalisation.
   - **Contrast-Based Score Expansion (Linear Stretching)**: After penalty adjustment, scores are linearly stretched around a midpoint (`CONTRAST_MID = 60`) using a configurable factor (`CONTRAST_FACTOR = 1.25`). This enhances score spread across the full range while preserving monotonic ordering — sites that scored better before stretching will still score better after.
 
+## Seventh Update
+- **src/codeExtractor.js** : A Puppeteer-based DOM auditor that extracts concrete "bad code" snippets directly from live pages. Fully decoupled from `analyzer.js` — the analyzer handles scoring metrics while `codeExtractor` collects raw DOM evidence for AI-driven fix suggestions. Detects issues across 7 categories:
+  - **Clear Purpose**: missing/empty `alt` attributes on images, missing or duplicate `<h1>`, heading level skips, form inputs without associated labels.
+  - **Findable**: anchor elements with no accessible text, generic link text ("click here", "read more", etc.).
+  - **Media**: videos without caption tracks, autoplay media missing `muted` or `controls`.
+  - **Clear Language**: `<html>` element missing a `lang` attribute.
+  - **Visual Presentation**: inline styles suppressing focus outlines (`outline: none`), inline `text-align: justify`.
+  - **Assistance & Support**: buttons with no accessible name, submit inputs with missing or generic `value`, forms with no ARIA-linked error/hint text.
+  - **Distraction**: deprecated moving elements (`<marquee>`, `<blink>`), GIF images that may loop indefinitely.
+
+  Each detected issue includes a `ruleId`, WCAG criterion, severity level (`critical` / `serious` / `moderate` / `minor`), offending `snippet` (outerHTML, truncated to 500 chars), best-effort CSS `selector`, and a plain-language `fix` direction for AI skill context.
+
+- **src/ai-agent/agent.js** : A lightweight local agent that routes structured input payloads to registered AI skills. Skills are registered in an array and selected by `inputType`. Supports CLI commands for health checks, connectivity tests, and demo runs:
+  - `node ai-agent/agent.js health` — Check Ollama connectivity.
+  - `node ai-agent/agent.js test` — Send a test message to the configured model.
+  - `node ai-agent/agent.js demo` — Run the cognitive accessibility skill with sample data.
+  - `node ai-agent/agent.js demo-fix` — Run the code fix skill with a sample issue.
+
+- **src/ai-agent/skills/cognitiveAccessibilityPrompt.js** : AI skill that receives structured section scores and insights from the scorer and asks a local Ollama model to generate a plain-language accessibility report. Returns a JSON object containing a 2–3 sentence summary, the top 3 identified problems, and 3–5 prioritised recommendations each with a title, action, reason, and priority level (`high` / `medium` / `low`).
+
+- **src/ai-agent/skills/codeFixSuggestions.js** : AI skill that receives a list of `codeIssues` from `codeExtractor` and asks the local Ollama model to generate corrected HTML/CSS snippets for each issue. Issues are sorted by severity and capped at 10 per request to keep prompts compact. Returns a JSON `fixes` array with the original snippet, corrected snippet, a one-sentence explanation, and a `breakingChange` flag for each issue.
+
 ---
 ## Installation & Usage
-### 1.Install dependencies:
- `npm install puppeteer express cors`
-### 2. Run the local test (Save to file):
- `node index.js https://example.com`
- ### 3. Run the Backend API Server (For Frontend UI):
- `node server.js` 
- *(Server will run on http://localhost:3000)*
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) v18 or higher
+- [Ollama](https://ollama.com/) installed and running locally (required for AI skill features)
+- The `qwen2.5:7b-instruct` model pulled in Ollama (or set `OLLAMA_MODEL` env var to your preferred model)
+
+```bash
+# Pull the default model (first time only)
+ollama pull qwen2.5:7b-instruct
+```
+
+### 1. Install dependencies
+```bash
+npm install puppeteer express cors
+```
+
+### 2. Run the local test (saves report to file)
+```bash
+node index.js https://example.com
+```
+
+### 3. Run the backend API server (for frontend UI)
+```bash
+node server.js
+```
+*(Server will run on http://localhost:3000)*
+
+### 4. Run the AI agent
+```bash
+# Check Ollama connectivity
+node src/ai-agent/agent.js health
+
+# Send a test message to the model
+node src/ai-agent/agent.js test
+
+# Demo: cognitive accessibility skill with sample data
+node src/ai-agent/agent.js demo
+
+# Demo: code fix skill with a sample issue
+node src/ai-agent/agent.js demo-fix
+```
+
+### Environment Variables (optional)
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_MODEL` | `qwen2.5:7b-instruct` | Model to use for AI skills |
+| `OLLAMA_ENABLED` | `true` | Set to `false` to disable AI skill calls |
 
 ---
 ## Appendix: Technical Documentation
