@@ -31,10 +31,10 @@ Ranbowsix code base for project14, HTML exract, mapping and score.
 
 ## Sixth Update 
 - **src/scorer.js**:
-  - Add `SKIP_RULES` to skip the indicator that "not applicable" to the current page.
-  - Introduce Penalty Multiplier in `calculateScores` function to give more penalty to Low-quality sites.
-  - Introduce Contrast-Based Score Expansion (Linear Stretching) after penalty adjustment, enhancing score spread while preserving monotonic ordering.
-  - Four-Level Status Threshold.
+  - **Conditional `SKIP_RULES`**: Refined skip rule logic so that metrics are only penalised when they are actually applicable. For example, `skipLinkWorks` is now only evaluated when `hasSkipLink` is `true` — a broken skip link is not penalised on pages that have no skip link at all.
+  - **Penalty Multiplier Enhancement**: Improved score compression for low-quality sites. Sections scoring below the penalty threshold now apply a weighted miss-based multiplier to the overall score, with a configurable floor to prevent over-penalisation.
+  - **Contrast-Based Score Expansion (Linear Stretching)**: After penalty adjustment, scores are linearly stretched around a midpoint (`CONTRAST_MID = 60`) using a configurable factor (`CONTRAST_FACTOR = 1.25`). This enhances score spread across the full range while preserving monotonic ordering — sites that scored better before stretching will still score better after.
+
 ---
 ## Installation & Usage
 ### 1.Install dependencies:
@@ -55,7 +55,7 @@ This appendix provides a deep dive into the architecture, scoring logic, and dat
 The application follows a strictly decoupled architecture, separating data collection from evaluation logic.
 
 1.  **Orchestrator (`index.js` / `server.js`)**: Handles CLI arguments or API requests, manages the asynchronous flow, and formats results.
-2.  **Data Collector (`src/analyzer.js`)**: A Puppeteer-based engine extract DOM properties in the website. Convert raw DOM data into structured “Artifacts”.
+2.  **Data Collector (`src/analyzer.js`)**: A Puppeteer-based engine extract DOM properties in the website. Convert raw DOM data into structured "Artifacts".
 3.  **Knowledge Base (`src/mapping.js`)**: A dictionary defining thresholds, weights, and regulatory mappings (WCAG/ISO).
 4.  **Scoring Engine (`src/scorer.js`)**: A stateless module that transforms raw data into normalized scores.
 
@@ -119,6 +119,66 @@ $$Score_{overall} = \frac{\sum (Score_{section} \times weight_{section})}{\sum w
 |  Caution | 70 – 84 |
 |  Warning | 55 – 69 |
 |  Poor | < 54 |
+
+#### 3.4 Score Adjustment Pipeline
+
+After section scores are computed, the overall score passes through two sequential adjustment stages designed to improve score distribution and more strongly differentiate low-quality sites.
+
+##### Stage 1 — Penalty Multiplier
+
+Sites with one or more sections scoring below `PENALTY_THRESHOLD` receive a compounding penalty applied to the arithmetic overall score. Each underperforming section contributes a weighted reduction proportional to how far it falls below the threshold:
+
+```javascript
+let penaltyMultiplier = 1.0;
+
+for (const sec of sections) {
+  if (sec.score !== null && sec.score < PENALTY_THRESHOLD) {
+    const miss = (PENALTY_THRESHOLD - sec.score) / PENALTY_THRESHOLD;
+    penaltyMultiplier *= 1 - miss * sec.weight * PENALTY_STRENGTH;
+  }
+}
+
+penaltyMultiplier = Math.max(penaltyMultiplier, PENALTY_FLOOR);
+
+const penalizedScore = arithmeticScore * penaltyMultiplier;
+```
+
+- **`PENALTY_THRESHOLD`** — Section score below which a penalty is applied.
+- **`PENALTY_STRENGTH`** — Controls how aggressively each miss reduces the multiplier.
+- **`PENALTY_FLOOR`** — Minimum value for the multiplier, preventing runaway penalisation.
+
+The penalty is multiplicative and compounds across all underperforming sections, meaning sites with multiple weak areas are penalised more severely than sites with a single weak section.
+
+##### Stage 2 — Contrast-Based Score Expansion (Linear Stretching)
+
+After penalisation, scores are linearly stretched around a fixed midpoint to increase separation between sites of varying quality. This step preserves monotonic ordering — a site that scored higher before stretching will always score higher after.
+
+```javascript
+const CONTRAST_MID = 60;
+const CONTRAST_FACTOR = 1.25;
+
+let adjustedScore =
+  CONTRAST_MID + (boostedScore - CONTRAST_MID) * CONTRAST_FACTOR;
+
+adjustedScore = Math.max(0, Math.min(100, adjustedScore));
+```
+
+- Scores above `CONTRAST_MID` are pushed higher; scores below are pushed lower.
+- The result is clamped to `[0, 100]`.
+- Combined with the penalty multiplier, this produces a final score distribution that is more discriminating across the full quality spectrum.
+
+#### 3.5 Conditional SKIP_RULES
+
+Certain metrics are only meaningful in specific page contexts. `SKIP_RULES` defines per-metric conditions under which scoring is suppressed entirely — the metric is treated as not applicable and excluded from the weighted sum.
+
+For example, `skipLinkWorks` (which checks whether a skip link functions correctly) is only penalised if a skip link actually exists on the page:
+
+```javascript
+// Only penalise a broken skip link if a skip link actually exists.
+skipLinkWorks: (m) => m.hasSkipLink === false,
+```
+
+This prevents pages from being unfairly penalised for failing a check that was never relevant to them, keeping section scores grounded in what is actually present on the page.
 
 ### 4. Regulatory & Standards Mapping (WCAG 2.2 & ISO 9241-11)
 
