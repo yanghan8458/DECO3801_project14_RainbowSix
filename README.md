@@ -307,10 +307,6 @@ Both skills use a `safeJsonParse` fallback that attempts to extract a JSON objec
 
 The RainbowSix analyzer is fully aligned with **WCAG 2.2** (published Oct 2023), with a specific focus on **Cognitive Accessibility** and **User Interaction Efficiency**.
 
-### 5. Regulatory & Standards Mapping (WCAG 2.2 & ISO 9241-11)
-
-The RainbowSix analyzer is fully aligned with **WCAG 2.2** (published Oct 2023), with a specific focus on **Cognitive Accessibility** and **User Interaction Efficiency**.
-
 #### 5.1 WCAG 2.2 Success Criteria Mapping
 Each metric is evaluated against the latest success criteria to ensure compliance for users with cognitive, motor, or sensory impairments.
 
